@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coterm"
+description = "Coterm CLI runtime"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Coterm"},
+]
+keywords = ["coterm", "cli", "agent", "terminal", "remote"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Terminals",
+]
+dynamic = ["version"]
+dependencies = [
+    "websockets>=12.0",
+    "claude-agent-sdk>=0.1.49",
+    "qrcode>=7.4.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/Heipiao/coterm"
+Repository = "https://github.com/Heipiao/coterm"
+Issues = "https://github.com/Heipiao/coterm/issues"
+
+[project.scripts]
+coterm = "coterm_cli.main:main"
+coterm-cli = "coterm_cli.main:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "coterm_cli.__version__"}

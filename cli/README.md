@@ -1,6 +1,6 @@
 # Coterm CLI
 
-Coterm CLI is the local runtime for Coterm. It starts an agent on your machine, connects it to a Coterm Hub, and prints a QR code plus pairing code so a mobile client can attach to the session.
+Coterm CLI is the local runtime for Coterm. This package contains the CLI only. It starts an agent on your machine, connects it to a Coterm Hub, and prints a QR code plus pairing code so a mobile client can attach to the session.
 
 ## Install
 
@@ -10,11 +10,20 @@ Install from PyPI:
 pip install coterm
 ```
 
+If your environment already has older async dependencies installed, prefer forcing the CLI runtime requirements explicitly:
+
+```bash
+python -m pip install -U "coterm" "anyio>=4,<5"
+```
+
+This package does not install the Hub server. You need a reachable Coterm Hub, whether it is managed for you or self-hosted separately.
+
 ## Requirements
 
 - Python 3.10 or newer
 - A reachable Coterm Hub
 - Claude installed and available on `PATH` for the current alpha implementation
+- `anyio>=4,<5` for `claude-agent-sdk` subprocess transport compatibility
 
 ## Quick Start
 
@@ -100,9 +109,11 @@ Important environment variables:
 
 ## Notes
 
+- `pip install coterm` installs the CLI package only.
 - The current alpha implementation supports Claude only.
 - A Hub must already exist or be installed separately.
 - Authentication behavior depends on your Hub deployment model.
+- If `claude-agent-sdk` fails with `open_process() got an unexpected keyword argument 'user'`, your environment is using `anyio<4`; upgrade to `anyio>=4,<5`.
 
 ## License
 

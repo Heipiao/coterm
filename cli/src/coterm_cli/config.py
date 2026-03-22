@@ -41,6 +41,7 @@ class CLIConfig:
         session_id: str,
         device_id: str | None,
         auth_token: str | None = None,
+        permission_mode_override: str | None = None,
     ) -> "CLIConfig":
         allowed_tools: tuple[str, ...]
         if args.allowed_tool:
@@ -74,7 +75,7 @@ class CLIConfig:
                 args.reconnect_max_sec or os.getenv("COTERM_RECONNECT_MAX_SEC", "30")
             ),
             log_level=args.log_level or os.getenv("COTERM_LOG_LEVEL", "DEBUG" if args.verbose else "INFO"),
-            permission_mode=args.permission_mode or os.getenv("COTERM_PERMISSION_MODE"),
+            permission_mode=args.permission_mode or permission_mode_override or os.getenv("COTERM_PERMISSION_MODE"),
             working_dir=resolve_workdir(args),
             allowed_tools=allowed_tools,
             verbose=bool(args.verbose) and not args.no_verbose,

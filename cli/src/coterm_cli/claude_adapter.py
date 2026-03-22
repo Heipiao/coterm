@@ -172,6 +172,7 @@ class ClaudeRemoteAdapter(AgentAdapter):
     async def _consume_response(self, message_id: str) -> None:
         assert self._client is not None
         saw_stream_output = False
+        emitted_outputs: set[str] = set()
         try:
             async for message in self._client.receive_response():
                 if isinstance(message, TaskStartedMessage):
@@ -184,28 +185,36 @@ class ClaudeRemoteAdapter(AgentAdapter):
                     text = self._extract_stream_text(message)
                     if text:
                         saw_stream_output = True
-                        await self._event_queue.put(
-                            AgentEvent(
-                                type=AgentEventType.OUTPUT,
-                                message_id=message_id,
-                                content=text,
-                                raw=message.event,
-                            )
-                        )
+                        emitted_outputs.add(self._normalize_output(text))
+                        await self._emit_output(message_id, text, raw=message.event)
                     continue
 
                 if isinstance(message, AssistantMessage):
-                    if self._discard_current_response or saw_stream_output:
+                    handled = await self._consume_message_blocks(
+                        message,
+                        message_id,
+                        saw_stream_output=saw_stream_output,
+                        emitted_outputs=emitted_outputs,
+                    )
+                    if handled:
+                        continue
+                    if self._discard_current_response:
+                        continue
+                    if saw_stream_output:
                         continue
                     for block in message.content:
                         if isinstance(block, TextBlock) and block.text:
-                            await self._event_queue.put(
-                                AgentEvent(
-                                    type=AgentEventType.OUTPUT,
-                                    message_id=message_id,
-                                    content=block.text,
-                                )
-                            )
+                            emitted_outputs.add(self._normalize_output(block.text))
+                            await self._emit_output(message_id, block.text)
+                    continue
+
+                handled_generic_blocks = await self._consume_message_blocks(
+                    message,
+                    message_id,
+                    saw_stream_output=saw_stream_output,
+                    emitted_outputs=emitted_outputs,
+                )
+                if handled_generic_blocks:
                     continue
 
                 if isinstance(message, RateLimitEvent):
@@ -235,6 +244,18 @@ class ClaudeRemoteAdapter(AgentAdapter):
                             )
                         )
                         return
+                    fallback_text = (message.result or "").strip()
+                    if fallback_text and self._normalize_output(fallback_text) not in emitted_outputs:
+                        emitted_outputs.add(self._normalize_output(fallback_text))
+                        await self._emit_output(
+                            message_id,
+                            fallback_text,
+                            raw={
+                                "subtype": message.subtype,
+                                "stop_reason": message.stop_reason,
+                                "result": message.result,
+                            },
+                        )
                     await self._event_queue.put(
                         AgentEvent(type=AgentEventType.MESSAGE_STOP, message_id=message_id)
                     )
@@ -283,3 +304,130 @@ class ClaudeRemoteAdapter(AgentAdapter):
         if isinstance(text, str) and text:
             return text
         return None
+
+    async def _emit_output(self, message_id: str, content: str, raw: dict[str, Any] | None = None) -> None:
+        if not content:
+            return
+        await self._event_queue.put(
+            AgentEvent(
+                type=AgentEventType.OUTPUT,
+                message_id=message_id,
+                content=content,
+                raw=raw,
+            )
+        )
+
+    async def _consume_message_blocks(
+        self,
+        message: Any,
+        message_id: str,
+        *,
+        saw_stream_output: bool,
+        emitted_outputs: set[str],
+    ) -> bool:
+        if self._discard_current_response:
+            return False
+
+        content = self._extract_message_content(message)
+        if not content:
+            return False
+
+        handled = False
+        for block in content:
+            if isinstance(block, TextBlock):
+                if saw_stream_output or not block.text:
+                    handled = True
+                    continue
+                handled = True
+                normalized = self._normalize_output(block.text)
+                if normalized and normalized not in emitted_outputs:
+                    emitted_outputs.add(normalized)
+                    await self._emit_output(message_id, block.text)
+                continue
+
+            block_type = self._read_value(block, "type")
+            if block_type == "text":
+                text = self._read_value(block, "text")
+                handled = True
+                if saw_stream_output or not isinstance(text, str) or not text:
+                    continue
+                normalized = self._normalize_output(text)
+                if normalized and normalized not in emitted_outputs:
+                    emitted_outputs.add(normalized)
+                    await self._emit_output(message_id, text)
+                continue
+
+            if block_type == "tool_use":
+                handled = True
+                tool_name = self._read_value(block, "name")
+                tool_input = self._coerce_dict(self._read_value(block, "input"))
+                block_id = self._read_value(block, "id")
+                summary = (
+                    str(tool_input.get("description"))
+                    if isinstance(tool_input.get("description"), str) and tool_input.get("description")
+                    else f"tool call: {tool_name or 'unknown'}"
+                )
+                await self._event_queue.put(
+                    AgentEvent(
+                        type=AgentEventType.TOOL_CALL,
+                        message_id=message_id,
+                        request_id=str(block_id or f"tool_{uuid4().hex[:12]}"),
+                        tool_name=str(tool_name or "unknown"),
+                        tool_input=tool_input,
+                        content=summary,
+                    )
+                )
+                continue
+
+            if block_type == "tool_result":
+                handled = True
+                text = self._stringify_tool_result(self._read_value(block, "content"))
+                normalized = self._normalize_output(text)
+                if normalized and normalized not in emitted_outputs:
+                    emitted_outputs.add(normalized)
+                    await self._emit_output(message_id, text)
+                continue
+
+        return handled
+
+    def _extract_message_content(self, message: Any) -> list[Any]:
+        direct_content = getattr(message, "content", None)
+        if isinstance(direct_content, list):
+            return direct_content
+
+        inner_message = getattr(message, "message", None)
+        nested_content = getattr(inner_message, "content", None)
+        if isinstance(nested_content, list):
+            return nested_content
+
+        return []
+
+    def _read_value(self, value: Any, field: str) -> Any:
+        if isinstance(value, dict):
+            return value.get(field)
+        return getattr(value, field, None)
+
+    def _stringify_tool_result(self, value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts: list[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                text = self._read_value(item, "text")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+                    continue
+                content = self._read_value(item, "content")
+                if isinstance(content, str) and content:
+                    parts.append(content)
+            return "\n".join(part for part in parts if part).strip()
+        return ""
+
+    def _coerce_dict(self, value: Any) -> dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    def _normalize_output(self, content: str) -> str:
+        return " ".join(content.split())

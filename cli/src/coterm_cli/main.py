@@ -50,6 +50,7 @@ async def async_main() -> None:
             session_id=activation.session_id,
             device_id=startup.device_id,
             auth_token=activation.cli_connect_token,
+            permission_mode_override=activation.permission_mode,
         )
 
     configure_logging(config.log_level)

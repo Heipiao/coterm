@@ -33,6 +33,7 @@ class ActivationInfo:
     session_id: str
     ws_cli_url: str
     cli_connect_token: str
+    permission_mode: str | None = None
 
 
 def bootstrap_startup(args) -> StartupInfo:
@@ -91,6 +92,7 @@ async def wait_for_pairing_activation(info: StartupInfo, *, poll_interval_sec: f
                 session_id=session_id,
                 ws_cli_url=ws_cli_url,
                 cli_connect_token=cli_connect_token,
+                permission_mode=str(status.get("permission_mode")) if status.get("permission_mode") is not None else None,
             )
         if pairing_status == "EXPIRED":
             raise RuntimeError("pairing expired before a client connected")

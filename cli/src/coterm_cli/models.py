@@ -24,6 +24,7 @@ class AgentEventType(str, Enum):
     MESSAGE_START = "message_start"
     OUTPUT = "output"
     MESSAGE_STOP = "message_stop"
+    TOOL_CALL = "tool_call"
     TOOL_USE = "tool_use"
     TOOL_RESULT = "tool_result"
     ERROR = "error"

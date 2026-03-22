@@ -32,7 +32,10 @@ class AgentRuntime:
         self._logger = logger
         self._adapter_events_task: asyncio.Task[None] | None = None
         self._output_index = 0
+        self._next_render_block_sequence = 0
         self._active_text_block_created_at: int | None = None
+        self._active_text_block_sequence: int | None = None
+        self._visible_content_emitted = False
         self._shutdown_event = asyncio.Event()
 
         self._hub.on_message(self.handle_hub_message)
@@ -125,8 +128,7 @@ class AgentRuntime:
 
         self._session.set_active_message(message_id)
         self._session.transition(SessionState.PROCESSING)
-        self._output_index = 0
-        self._active_text_block_created_at = None
+        self._reset_turn_render_state()
         await self._sync_session_state()
 
         try:
@@ -179,7 +181,7 @@ class AgentRuntime:
         await self._adapter.cancel_current_turn()
         self._session.set_active_message(None)
         self._session.set_pending_permission(None)
-        self._active_text_block_created_at = None
+        self._reset_turn_render_state()
         if self._session.state != SessionState.ENDED:
             self._session.force_state(SessionState.ACTIVE)
         await self._sync_session_state()
@@ -204,22 +206,27 @@ class AgentRuntime:
 
         if event.type == AgentEventType.OUTPUT:
             if event.message_id and event.content:
-                render_block = self._make_text_block(event.message_id, event.content)
-                await self._safe_send(
-                    self._hub.send_message_block(
-                        message_id=event.message_id,
-                        block=render_block.to_dict(),
-                    )
+                await self._emit_text_output(event.message_id, event.content)
+            return
+
+        if event.type == AgentEventType.TOOL_CALL:
+            message_id = event.message_id or self._session.active_message_id
+            if not message_id:
+                return
+            tool_request_id = event.request_id or f"tool_{uuid4().hex[:12]}"
+            await self._safe_send(
+                self._hub.send_message_block(
+                    message_id=message_id,
+                    block=self._make_tool_call_block(
+                        message_id=message_id,
+                        request_id=tool_request_id,
+                        tool_name=event.tool_name or "unknown",
+                        summary=event.content or f"tool call: {event.tool_name or 'unknown'}",
+                        tool_input=event.tool_input,
+                    ),
                 )
-                await self._safe_send(
-                    self._hub.send_agent_output(
-                        message_id=event.message_id,
-                        chunk=event.content,
-                        final=False,
-                        index=self._output_index,
-                    )
-                )
-                self._output_index += 1
+            )
+            self._visible_content_emitted = True
             return
 
         if event.type == AgentEventType.TOOL_USE:
@@ -261,7 +268,7 @@ class AgentRuntime:
                 )
             self._session.set_active_message(None)
             self._session.set_pending_permission(None)
-            self._active_text_block_created_at = None
+            self._reset_turn_render_state()
             if self._session.state != SessionState.ENDED:
                 self._session.force_state(SessionState.ACTIVE)
                 await self._sync_session_state()
@@ -279,29 +286,90 @@ class AgentRuntime:
             )
             if event.fatal:
                 self._session.force_state(SessionState.ENDED)
-                self._active_text_block_created_at = None
+                self._reset_turn_render_state()
                 await self._sync_session_state()
             return
 
+    def _reset_turn_render_state(self) -> None:
+        self._output_index = 0
+        self._next_render_block_sequence = 0
+        self._active_text_block_created_at = None
+        self._active_text_block_sequence = None
+        self._visible_content_emitted = False
+
     def _text_block_id(self, message_id: str) -> str:
         return f"{message_id}:block:text:0"
+
+    def _next_sequence(self) -> int:
+        sequence = self._next_render_block_sequence
+        self._next_render_block_sequence += 1
+        return sequence
 
     def _make_text_block(self, message_id: str, text: str) -> RenderBlock:
         now = utc_now_ms()
         created_at = self._active_text_block_created_at or now
         if self._active_text_block_created_at is None:
             self._active_text_block_created_at = created_at
+        sequence = self._active_text_block_sequence
+        if sequence is None:
+            sequence = self._next_sequence()
+            self._active_text_block_sequence = sequence
         return RenderBlock(
             block_id=self._text_block_id(message_id),
             message_id=message_id,
             kind="text",
             status="STREAMING",
-            sequence=0,
+            sequence=sequence,
             created_at=created_at,
             updated_at=now,
             text=text,
             format="plain",
         )
+
+    def _make_tool_call_block(
+        self,
+        *,
+        message_id: str,
+        request_id: str,
+        tool_name: str,
+        summary: str,
+        tool_input: dict[str, object] | None,
+    ) -> dict[str, object]:
+        now = utc_now_ms()
+        return {
+            "block_id": f"{message_id}:block:tool_use:{request_id}",
+            "message_id": message_id,
+            "kind": "tool_use",
+            "status": "DONE",
+            "sequence": self._next_sequence(),
+            "created_at": now,
+            "updated_at": now,
+            "request_id": request_id,
+            "tool_name": tool_name,
+            "summary": summary,
+            "input": tool_input or {},
+            "approval_status": "APPROVED",
+            "meta": {"readonly": True},
+        }
+
+    async def _emit_text_output(self, message_id: str, content: str) -> None:
+        render_block = self._make_text_block(message_id, content)
+        await self._safe_send(
+            self._hub.send_message_block(
+                message_id=message_id,
+                block=render_block.to_dict(),
+            )
+        )
+        await self._safe_send(
+            self._hub.send_agent_output(
+                message_id=message_id,
+                chunk=content,
+                final=False,
+                index=self._output_index,
+            )
+        )
+        self._output_index += 1
+        self._visible_content_emitted = True
 
     async def _sync_session_state(self) -> None:
         if not self._hub.is_connected:

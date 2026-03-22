@@ -27,6 +27,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "anyio>=4,<5",
     "websockets>=12.0",
     "claude-agent-sdk>=0.1.49",
     "qrcode>=7.4.2",

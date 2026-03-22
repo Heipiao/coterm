@@ -36,7 +36,7 @@ def build_root_parser() -> argparse.ArgumentParser:
             "  coterm\n"
             "  coterm claude --workdir ~/project/foo\n"
             "  coterm hub start\n"
-            "  coterm auth login --hub http://127.0.0.1:18083\n\n"
+            f"  coterm auth login --hub {DEFAULT_HUB_BASE_URL}\n\n"
             f"Hub resolution order: --hub -> $COTERM_HUB -> $COTERM_HUB_BASE_URL -> saved config -> {DEFAULT_HUB_BASE_URL}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -21,7 +21,7 @@ Current runtime assumptions:
 4. Validate install and startup in a clean virtual environment
 5. Draft release notes
 6. Confirm the Hub story is accurate in docs:
-   - default Hub is `http://127.0.0.1:18083`
+   - some distributions may define a built-in default Hub
    - `COTERM_HUB` / `COTERM_HUB_BASE_URL` override it
    - `coterm-hub` is a separate deliverable unless bundled deliberately
 
@@ -69,7 +69,7 @@ Repository:
 After GitHub release validation:
 
 1. Ensure the package name is final
-2. In PyPI, create a project or a pending publisher for `coterm-cli`
+2. In PyPI, create a project or a pending publisher for `coterm`
 3. Configure Trusted Publishing for:
    - owner: `Heipiao`
    - repository: `coterm`
@@ -87,6 +87,6 @@ coterm doctor
 ## Product Notes
 
 - `COTERM_HUB` and `COTERM_HUB_BASE_URL` override the Hub base URL
-- If neither is set, the CLI falls back to `http://127.0.0.1:18083`
+- If neither is set, the CLI falls back to the distribution default, if one is defined
 - `coterm hub start` should only be documented as supported when `coterm-hub` is independently installed or published
 - GitHub Actions should verify packaging on every CLI change and publish only from tagged releases

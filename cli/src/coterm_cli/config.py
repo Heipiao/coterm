@@ -40,6 +40,7 @@ class CLIConfig:
         hub_url: str,
         session_id: str,
         device_id: str | None,
+        auth_token: str | None = None,
     ) -> "CLIConfig":
         allowed_tools: tuple[str, ...]
         if args.allowed_tool:
@@ -51,9 +52,13 @@ class CLIConfig:
         return cls(
             hub_url=hub_url,
             auth_token=(
-                args.auth_token
-                if args.auth_token is not None
-                else os.getenv("COTERM_AUTH_TOKEN", "") or resolve_saved_auth_token() or ""
+                auth_token
+                if auth_token is not None
+                else (
+                    args.auth_token
+                    if args.auth_token is not None
+                    else os.getenv("COTERM_AUTH_TOKEN", "") or resolve_saved_auth_token() or ""
+                )
             ),
             session_id=session_id,
             device_id=device_id or os.getenv("COTERM_DEVICE_ID", ""),
@@ -113,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="coterm",
         description="Run Coterm locally and connect it to a Coterm hub.",
-        epilog="Examples:\n  coterm\n  coterm claude --workdir ~/project/foo\n  coterm --hub http://127.0.0.1:18083",
+        epilog=f"Examples:\n  coterm\n  coterm claude --workdir ~/project/foo\n  coterm --hub {DEFAULT_HUB_BASE_URL}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

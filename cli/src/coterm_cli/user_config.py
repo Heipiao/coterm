@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_HUB_BASE_URL = "http://127.0.0.1:18083"
+DEFAULT_HUB_BASE_URL = "https://hub.coterm.aigcteacher.top"
+LEGACY_LOCAL_HUB_BASE_URL = "http://127.0.0.1:18083"
 
 
 def coterm_home() -> Path:
@@ -47,7 +48,12 @@ def update_config(**values: Any) -> dict[str, Any]:
 
 def resolve_saved_hub() -> str | None:
     value = load_config().get("hub")
-    return value if isinstance(value, str) and value.strip() else None
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    if not trimmed or trimmed == LEGACY_LOCAL_HUB_BASE_URL:
+        return None
+    return trimmed
 
 
 def resolve_saved_auth_token() -> str | None:

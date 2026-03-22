@@ -16,7 +16,7 @@ def configure_logging(level: str) -> None:
 
 
 async def async_main() -> None:
-    from .bootstrap import bootstrap_startup, print_startup_banner, resolve_device_id
+    from .bootstrap import bootstrap_startup, print_startup_banner, resolve_device_id, wait_for_pairing_activation
     from .claude_adapter import ClaudeRemoteAdapter
     from .config import CLIConfig, build_parser, resolve_agent_name
     from .hub_client import HubClient
@@ -42,11 +42,14 @@ async def async_main() -> None:
     else:
         startup = bootstrap_startup(args)
         print_startup_banner(startup)
+        activation = await wait_for_pairing_activation(startup)
+        print(f"Paired. Session ID: {activation.session_id}")
         config = CLIConfig.from_args(
             args,
-            hub_url=startup.ws_cli_url,
-            session_id=startup.session_id,
+            hub_url=activation.ws_cli_url,
+            session_id=activation.session_id,
             device_id=startup.device_id,
+            auth_token=activation.cli_connect_token,
         )
 
     configure_logging(config.log_level)

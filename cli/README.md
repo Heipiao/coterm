@@ -1,24 +1,14 @@
 # Coterm CLI
 
-Coterm CLI is the local runtime for Coterm. It creates a session on a Coterm Hub, prints a pairing QR code, and runs the agent in your local terminal environment.
+Coterm CLI is the local runtime for Coterm. It starts an agent on your machine, connects it to a Coterm Hub, and prints a QR code plus pairing code so a mobile client can attach to the session.
 
-This package is designed to ship as an independent product:
+## Install
 
-- publish the source on GitHub
-- distribute the CLI on PyPI with `pip install coterm`
-- let users override the Hub with environment variables while keeping a built-in default
+Install from PyPI:
 
-Source repository:
-
-- `https://github.com/Heipiao/coterm`
-
-## License
-
-This project is licensed under the GNU Affero General Public License v3.0 or later.
-
-If you distribute a modified version of Coterm CLI, you must provide the corresponding source code under the AGPL as well.
-
-AGPL is stricter than GPL for server software: if someone modifies Coterm CLI and lets users interact with that modified version over a network, they must also offer the corresponding source code for that running version.
+```bash
+pip install coterm
+```
 
 ## Requirements
 
@@ -26,63 +16,24 @@ AGPL is stricter than GPL for server software: if someone modifies Coterm CLI an
 - A reachable Coterm Hub
 - Claude installed and available on `PATH` for the current alpha implementation
 
-## Hub Configuration
-
-Coterm CLI has a built-in default Hub:
-
-```text
-http://127.0.0.1:18083
-```
-
-You can override it with environment variables:
-
-```bash
-export COTERM_HUB=http://your-hub.example.com
-```
-
-Coterm CLI also accepts `COTERM_HUB_BASE_URL`.
-
-Hub resolution order is:
-
-1. `--hub`
-2. `COTERM_HUB`
-3. `COTERM_HUB_BASE_URL`
-4. saved config in `~/.coterm/config.json`
-5. built-in default `http://127.0.0.1:18083`
-
-## Install
-
-Install from a published package:
-
-```bash
-pip install coterm
-```
-
-Install from a cloned repository:
-
-```bash
-cd coterm/cli
-pip install .
-```
-
 ## Quick Start
 
-Check prerequisites:
+Check local prerequisites:
 
 ```bash
 coterm doctor
 ```
 
-Point the CLI at your Hub if you are not using the default:
+If you are using your own Hub, point the CLI at it explicitly:
 
 ```bash
 export COTERM_HUB=http://your-hub.example.com
 ```
 
-Save Hub credentials if your Hub requires them:
+If your Hub requires authentication, save the Hub URL and token:
 
 ```bash
-coterm auth login --hub http://127.0.0.1:18083
+coterm auth login --hub http://your-hub.example.com
 ```
 
 Start a session:
@@ -93,12 +44,35 @@ coterm
 
 This will:
 
-1. Create a session on the configured Hub
-2. Create a pairing token
+1. Contact the configured Hub
+2. Request a pairing flow
 3. Print a QR code and pairing code
-4. Start the local agent runtime
+4. Wait for a mobile client to complete pairing
+5. Start the local agent runtime
 
-On the mobile side, the user scans the QR code or enters the pairing code to bind the iPhone to that session.
+Some distributions may ship with a built-in default Hub so `pip install coterm` can work out of the box. If you run your own Hub, use `--hub` or `COTERM_HUB` to override it.
+
+## Hub Configuration
+
+Coterm CLI resolves the Hub in this order:
+
+1. `--hub`
+2. `COTERM_HUB`
+3. `COTERM_HUB_BASE_URL`
+4. saved config in `~/.coterm/config.json`
+5. package default, if the distribution defines one
+
+Save Hub credentials locally:
+
+```bash
+coterm auth login --hub http://your-hub.example.com
+```
+
+Check saved configuration:
+
+```bash
+coterm auth status
+```
 
 ## Commands
 
@@ -107,7 +81,7 @@ coterm
 coterm doctor
 coterm version
 coterm auth status
-coterm auth login --hub http://127.0.0.1:18083
+coterm auth login --hub http://your-hub.example.com
 coterm hub status
 ```
 
@@ -124,25 +98,12 @@ Important environment variables:
 - `COTERM_CLAUDE_BIN`: Path to the `claude` executable
 - `COTERM_WORKING_DIR`: Default working directory
 
-Resolution order for Hub configuration is:
+## Notes
 
-1. CLI argument
-2. Environment variable
-3. Saved config
-4. Built-in default `http://127.0.0.1:18083`
+- The current alpha implementation supports Claude only.
+- A Hub must already exist or be installed separately.
+- Authentication behavior depends on your Hub deployment model.
 
-## Product Notes
+## License
 
-This package is designed to be independently installable. However, today it still depends on external runtime prerequisites:
-
-- A Hub must already exist or be separately installable
-- Claude must be installed separately
-- Authentication setup depends on your Hub deployment model
-
-For production distribution, treat `coterm-cli` and `coterm-hub` as separate deliverables unless you intentionally publish both.
-
-At the moment:
-
-- `coterm` is the user-facing runtime package
-- `coterm-hub` should be installed separately if you want local Hub management
-- `coterm hub start` should only be documented as supported when `coterm-hub` is actually installed
+This project is licensed under the GNU Affero General Public License v3.0 or later.

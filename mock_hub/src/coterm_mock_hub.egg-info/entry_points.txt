@@ -1,0 +1,2 @@
+[console_scripts]
+coterm-mock-hub = coterm_mock_hub.main:main
